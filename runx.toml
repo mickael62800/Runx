@@ -1,0 +1,33 @@
+[project]
+name = "runx-demo"
+
+[tasks.build]
+cmd = "cargo build"
+category = "build"
+watch = ["src/**/*.rs"]
+
+[tasks.check]
+cmd = "cargo check"
+category = "build"
+watch = ["src/**/*.rs"]
+
+[tasks.test-unit]
+cmd = "cargo test"
+category = "unit"
+watch = ["src/**/*.rs"]
+depends_on = ["build"]
+
+[tasks.test-integration]
+cmd = "echo 'Integration tests placeholder'"
+category = "integration"
+depends_on = ["build"]
+
+[tasks.test-e2e]
+cmd = "echo 'E2E tests placeholder'"
+category = "e2e"
+depends_on = ["build"]
+
+[tasks.lint]
+cmd = "cargo clippy"
+category = "lint"
+watch = ["src/**/*.rs"]
