@@ -1,25 +1,30 @@
 mod config;
+mod db;
 mod graph;
+mod junit;
 mod report;
 mod runner;
+mod server;
 mod task;
 mod watcher;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use config::Config;
+use db::Database;
 use runner::Runner;
 use watcher::TaskWatcher;
 
 const CONFIG_FILE: &str = "runx.toml";
 const DEFAULT_REPORT_PATH: &str = "runx-report.html";
+const DEFAULT_DB_NAME: &str = ".runx.db";
 
 #[derive(Parser)]
 #[command(name = "runx")]
-#[command(about = "Universal CLI for task orchestration with intelligent watch")]
+#[command(about = "Universal CLI for task orchestration with live dashboard")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -37,11 +42,11 @@ enum Commands {
         /// Task name to run (runs all if not specified)
         task: Option<String>,
 
-        /// Generate HTML dashboard report
+        /// Generate HTML report (static, without live updates)
         #[arg(long)]
         report: bool,
 
-        /// Output path for HTML report (default: runx-report.html)
+        /// Output path for HTML report
         #[arg(long, default_value = DEFAULT_REPORT_PATH)]
         report_path: PathBuf,
     },
@@ -54,6 +59,13 @@ enum Commands {
 
     /// List all available tasks
     List,
+
+    /// Start the live dashboard server
+    Serve {
+        /// Port to run the dashboard on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+    },
 }
 
 fn main() {
@@ -77,27 +89,32 @@ fn run() -> Result<()> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
+    let db_path = base_dir.join(DEFAULT_DB_NAME);
+
     // For list command without config, show helpful error
     let config = Config::load(&config_path)
         .with_context(|| format!("Could not load {}", config_path.display()))?;
 
     match cli.command {
         Commands::Run { task, report, report_path } => {
-            cmd_run(&config, &base_dir, task, report, &report_path)
+            cmd_run(&config, &base_dir, &db_path, task, report, &report_path)
         }
-        Commands::Watch { task } => cmd_watch(&config, &base_dir, task),
+        Commands::Watch { task } => cmd_watch(&config, &base_dir, &db_path, task),
         Commands::List => cmd_list(&config),
+        Commands::Serve { port } => cmd_serve(port, db_path),
     }
 }
 
 fn cmd_run(
     config: &Config,
-    base_dir: &PathBuf,
+    base_dir: &Path,
+    db_path: &Path,
     task: Option<String>,
     generate_report: bool,
-    report_path: &PathBuf,
+    report_path: &Path,
 ) -> Result<()> {
-    let runner = Runner::new(config, base_dir);
+    let db = Database::open(db_path)?;
+    let runner = Runner::new(config, base_dir, Some(db), None);
 
     let results = match task {
         Some(name) => {
@@ -129,7 +146,7 @@ fn cmd_run(
     Ok(())
 }
 
-fn cmd_watch(config: &Config, base_dir: &PathBuf, task: Option<String>) -> Result<()> {
+fn cmd_watch(config: &Config, base_dir: &Path, db_path: &Path, task: Option<String>) -> Result<()> {
     // Validate task exists if specified
     if let Some(ref name) = task {
         if config.get_task(name).is_none() {
@@ -137,7 +154,8 @@ fn cmd_watch(config: &Config, base_dir: &PathBuf, task: Option<String>) -> Resul
         }
     }
 
-    let watcher = TaskWatcher::new(config, base_dir, task);
+    let db = Database::open(db_path)?;
+    let watcher = TaskWatcher::new(config, base_dir, task, Some(db));
     watcher.start()
 }
 
@@ -163,8 +181,16 @@ fn cmd_list(config: &Config) -> Result<()> {
             println!("    {} {}", "cwd:".dimmed(), cwd);
         }
 
+        if let Some(ref cat) = task.category {
+            println!("    {} {}", "category:".dimmed(), cat.magenta());
+        }
+
         if task.background {
             println!("    {} {}", "background:".dimmed(), "true".yellow());
+        }
+
+        if let Some(ref results) = task.results {
+            println!("    {} {}", "results:".dimmed(), results);
         }
 
         if !task.depends_on.is_empty() {
@@ -187,4 +213,16 @@ fn cmd_list(config: &Config) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn cmd_serve(port: u16, db_path: PathBuf) -> Result<()> {
+    // Initialize database if it doesn't exist
+    let _ = Database::open(&db_path)?;
+
+    println!("{}", "━".repeat(50).dimmed());
+    println!("  {} {}", "Runx Live Dashboard".bold().cyan(), "v0.2.0".dimmed());
+    println!("{}", "━".repeat(50).dimmed());
+
+    server::start_server(port, db_path).await
 }

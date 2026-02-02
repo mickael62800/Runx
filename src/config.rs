@@ -37,6 +37,9 @@ pub struct Task {
     /// Task category: unit, integration, e2e, build, lint, etc.
     #[serde(default)]
     pub category: Option<String>,
+    /// Path to JUnit XML results file (for detailed test parsing)
+    #[serde(default)]
+    pub results: Option<String>,
 }
 
 fn default_ready_timeout() -> u64 {

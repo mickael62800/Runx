@@ -1,14 +1,35 @@
 [package]
 name = "runx"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Universal CLI for task orchestration with intelligent watch"
+description = "Universal CLI for task orchestration with live dashboard"
 
 [dependencies]
+# CLI
 clap = { version = "4", features = ["derive"] }
-toml = "0.8"
-serde = { version = "1", features = ["derive"] }
-notify = "6"
-glob = "0.3"
 colored = "2"
 anyhow = "1"
+
+# Config
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# File watching
+notify = "6"
+glob = "0.3"
+
+# Web server
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# JUnit XML parsing
+quick-xml = "0.31"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }

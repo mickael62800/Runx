@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Runx Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 15px 30px;
+            border-bottom: 1px solid #2d2d44;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { color: #00d4ff; font-size: 24px; }
+        .header .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #26a69a;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.disconnected { background: #ef5350; animation: none; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .main { display: flex; height: calc(100vh - 60px); }
+        .sidebar {
+            width: 300px;
+            background: #12121a;
+            border-right: 1px solid #2d2d44;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid #2d2d44;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .runs-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .run-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #1a1a2e;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .run-item:hover { background: #1a1a2e; }
+        .run-item.active { background: #1a1a2e; border-left: 3px solid #00d4ff; }
+        .run-item.running { border-left: 3px solid #ffd700; }
+        .run-item .run-time { font-size: 12px; color: #666; }
+        .run-item .run-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .run-item .run-status.passed { background: #1b4332; color: #26a69a; }
+        .run-item .run-status.failed { background: #4a1c1c; color: #ef5350; }
+        .run-item .run-status.running { background: #3d3d00; color: #ffd700; }
+        .run-item .run-stats { font-size: 12px; color: #888; margin-top: 5px; }
+        .content { flex: 1; overflow-y: auto; padding: 20px; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2d2d44;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .stat-card .value.green { color: #26a69a; }
+        .stat-card .value.red { color: #ef5350; }
+        .stat-card .value.gold { color: #ffd700; }
+        .stat-card .label { font-size: 12px; color: #888; margin-top: 5px; }
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .chart-card {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2d2d44;
+        }
+        .chart-card h3 { color: #fff; font-size: 16px; margin-bottom: 15px; }
+        .chart-container { height: 250px; }
+        .run-detail { display: none; }
+        .run-detail.active { display: block; }
+        .run-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2d2d44;
+        }
+        .run-title { font-size: 20px; color: #00d4ff; }
+        .tasks-list { margin-top: 20px; }
+        .task-item {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid #2d2d44;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-item .task-name { font-weight: 500; }
+        .task-item .task-category {
+            font-size: 11px;
+            padding: 2px 8px;
+            background: #2d2d44;
+            border-radius: 10px;
+            color: #9c27b0;
+            margin-left: 10px;
+        }
+        .task-item .task-duration { color: #888; font-size: 13px; }
+        .task-item .task-status {
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .task-item .task-status.passed { background: #1b4332; color: #26a69a; }
+        .task-item .task-status.failed { background: #4a1c1c; color: #ef5350; }
+        .task-item .task-status.running {
+            background: #3d3d00;
+            color: #ffd700;
+            animation: pulse 1s infinite;
+        }
+        .progress-bar {
+            height: 4px;
+            background: #2d2d44;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #26a69a);
+            transition: width 0.3s;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+        }
+        .empty-state h2 { margin-bottom: 10px; color: #888; }
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #26a69a;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Runx Dashboard</h1>
+        <div class="status">
+            <div class="live-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connected</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="sidebar">
+            <div class="sidebar-header">Recent Runs</div>
+            <div class="runs-list" id="runsList"></div>
+        </div>
+
+        <div class="content">
+            <div id="overview">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="totalRuns">0</div>
+                        <div class="label">Total Runs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value green" id="passRate">0%</div>
+                        <div class="label">Pass Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="totalTasks">0</div>
+                        <div class="label">Tasks Executed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value gold" id="avgDuration">0ms</div>
+                        <div class="label">Avg Duration</div>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>Pass Rate Trend (7 days)</h3>
+                        <div id="trendChart" class="chart-container"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Recent Results</h3>
+                        <div id="resultsChart" class="chart-container"></div>
+                    </div>
+                </div>
+
+                <div id="currentRun" style="display: none;">
+                    <div class="chart-card">
+                        <h3>🔴 Run in Progress</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="runProgress" style="width: 0%"></div>
+                        </div>
+                        <div class="tasks-list" id="currentTasks"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="runDetail" class="run-detail">
+                <div class="run-header">
+                    <div>
+                        <span class="run-title" id="detailTitle">Run Details</span>
+                        <span class="run-item run-status" id="detailStatus">-</span>
+                    </div>
+                    <button onclick="showOverview()" style="background:#2d2d44;border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;">← Back</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value green" id="detailPassed">0</div>
+                        <div class="label">Passed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value red" id="detailFailed">0</div>
+                        <div class="label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="detailDuration">0ms</div>
+                        <div class="label">Duration</div>
+                    </div>
+                </div>
+                <div class="tasks-list" id="detailTasks"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let stats = null;
+        let currentRunId = null;
+        let currentRunTasks = [];
+        let trendChart, resultsChart;
+
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+            ws.onopen = () => {
+                document.getElementById('statusDot').classList.remove('disconnected');
+                document.getElementById('statusText').textContent = 'Connected';
+            };
+
+            ws.onclose = () => {
+                document.getElementById('statusDot').classList.add('disconnected');
+                document.getElementById('statusText').textContent = 'Disconnected';
+                setTimeout(connect, 2000);
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+        }
+
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'Stats':
+                    stats = msg.data;
+                    updateStats();
+                    updateRunsList();
+                    updateCharts();
+                    break;
+                case 'RunStarted':
+                    currentRunId = msg.data.run_id;
+                    currentRunTasks = [];
+                    document.getElementById('currentRun').style.display = 'block';
+                    document.getElementById('runProgress').style.width = '0%';
+                    document.getElementById('currentTasks').innerHTML = '';
+                    fetchStats();
+                    break;
+                case 'TaskStarted':
+                    addCurrentTask(msg.data.task_name, 'running');
+                    break;
+                case 'TaskCompleted':
+                    updateCurrentTask(msg.data.task);
+                    break;
+                case 'RunCompleted':
+                    currentRunId = null;
+                    document.getElementById('currentRun').style.display = 'none';
+                    fetchStats();
+                    break;
+            }
+        }
+
+        function updateStats() {
+            if (!stats) return;
+            document.getElementById('totalRuns').textContent = stats.total_runs;
+            document.getElementById('passRate').textContent = stats.overall_pass_rate.toFixed(1) + '%';
+            document.getElementById('totalTasks').textContent = stats.total_tasks_executed;
+            document.getElementById('avgDuration').textContent = stats.avg_duration_ms + 'ms';
+        }
+
+        function updateRunsList() {
+            if (!stats) return;
+            const list = document.getElementById('runsList');
+            if (stats.recent_runs.length === 0) {
+                list.innerHTML = '<div class="empty-state"><h2>No runs yet</h2><p>Run tasks to see results here</p></div>';
+                return;
+            }
+            list.innerHTML = stats.recent_runs.map(run => `
+                <div class="run-item ${run.status}" onclick="showRunDetail('${run.id}')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="run-status ${run.status}">${run.status.toUpperCase()}</span>
+                        <span class="run-time">${formatDate(run.started_at)}</span>
+                    </div>
+                    <div class="run-stats">${run.passed} passed, ${run.failed} failed</div>
+                </div>
+            `).join('');
+        }
+
+        function updateCharts() {
+            if (!stats) return;
+
+            // Trend chart
+            if (!trendChart) {
+                trendChart = echarts.init(document.getElementById('trendChart'), 'dark');
+            }
+            trendChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                grid: { left: '10%', right: '5%', top: '10%', bottom: '15%' },
+                xAxis: {
+                    type: 'category',
+                    data: stats.pass_rate_history.map(p => p.date),
+                    axisLabel: { color: '#888' }
+                },
+                yAxis: {
+                    type: 'value',
+                    max: 100,
+                    axisLabel: { color: '#888', formatter: '{value}%' }
+                },
+                series: [{
+                    type: 'line',
+                    smooth: true,
+                    data: stats.pass_rate_history.map(p => p.pass_rate.toFixed(1)),
+                    areaStyle: { color: 'rgba(38, 166, 154, 0.3)' },
+                    lineStyle: { color: '#26a69a' },
+                    itemStyle: { color: '#26a69a' }
+                }]
+            });
+
+            // Results chart
+            if (!resultsChart) {
+                resultsChart = echarts.init(document.getElementById('resultsChart'), 'dark');
+            }
+            const recentPassed = stats.recent_runs.slice(0, 10).map(r => r.passed);
+            const recentFailed = stats.recent_runs.slice(0, 10).map(r => r.failed);
+            const labels = stats.recent_runs.slice(0, 10).map((_, i) => `#${stats.total_runs - i}`);
+
+            resultsChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['Passed', 'Failed'], textStyle: { color: '#888' } },
+                grid: { left: '10%', right: '5%', top: '20%', bottom: '15%' },
+                xAxis: { type: 'category', data: labels.reverse(), axisLabel: { color: '#888' } },
+                yAxis: { type: 'value', axisLabel: { color: '#888' } },
+                series: [
+                    { name: 'Passed', type: 'bar', stack: 'total', data: recentPassed.reverse(), itemStyle: { color: '#26a69a' } },
+                    { name: 'Failed', type: 'bar', stack: 'total', data: recentFailed.reverse(), itemStyle: { color: '#ef5350' } }
+                ]
+            });
+        }
+
+        function addCurrentTask(name, status) {
+            currentRunTasks.push({ task_name: name, status });
+            renderCurrentTasks();
+        }
+
+        function updateCurrentTask(task) {
+            const idx = currentRunTasks.findIndex(t => t.task_name === task.task_name);
+            if (idx >= 0) {
+                currentRunTasks[idx] = task;
+            } else {
+                currentRunTasks.push(task);
+            }
+            renderCurrentTasks();
+        }
+
+        function renderCurrentTasks() {
+            const container = document.getElementById('currentTasks');
+            container.innerHTML = currentRunTasks.map(t => `
+                <div class="task-item">
+                    <div>
+                        <span class="task-name">${t.task_name}</span>
+                        ${t.category ? `<span class="task-category">${t.category}</span>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:15px;">
+                        <span class="task-duration">${t.duration_ms ? t.duration_ms + 'ms' : '...'}</span>
+                        <span class="task-status ${t.status}">${t.status.toUpperCase()}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            const completed = currentRunTasks.filter(t => t.status !== 'running').length;
+            const progress = (completed / Math.max(currentRunTasks.length, 1)) * 100;
+            document.getElementById('runProgress').style.width = progress + '%';
+        }
+
+        async function showRunDetail(runId) {
+            const resp = await fetch(`/api/runs/${runId}`);
+            const data = await resp.json();
+
+            document.getElementById('overview').style.display = 'none';
+            document.getElementById('runDetail').classList.add('active');
+
+            document.getElementById('detailTitle').textContent = `Run ${formatDate(data.run.started_at)}`;
+            document.getElementById('detailStatus').textContent = data.run.status.toUpperCase();
+            document.getElementById('detailStatus').className = `run-item run-status ${data.run.status}`;
+            document.getElementById('detailPassed').textContent = data.run.passed;
+            document.getElementById('detailFailed').textContent = data.run.failed;
+
+            const duration = data.tasks.reduce((sum, t) => sum + t.duration_ms, 0);
+            document.getElementById('detailDuration').textContent = duration + 'ms';
+
+            document.getElementById('detailTasks').innerHTML = data.tasks.map(t => `
+                <div class="task-item">
+                    <div>
+                        <span class="task-name">${t.task_name}</span>
+                        ${t.category ? `<span class="task-category">${t.category}</span>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:15px;">
+                        <span class="task-duration">${t.duration_ms}ms</span>
+                        <span class="task-status ${t.status}">${t.status.toUpperCase()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showOverview() {
+            document.getElementById('overview').style.display = 'block';
+            document.getElementById('runDetail').classList.remove('active');
+        }
+
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleString();
+        }
+
+        async function fetchStats() {
+            const resp = await fetch('/api/stats');
+            stats = await resp.json();
+            updateStats();
+            updateRunsList();
+            updateCharts();
+        }
+
+        window.addEventListener('resize', () => {
+            trendChart?.resize();
+            resultsChart?.resize();
+        });
+
+        connect();
+        fetchStats();
+    </script>
+</body>
+</html>

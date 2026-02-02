@@ -141,6 +141,7 @@ mod tests {
                 ready_when: None,
                 ready_timeout: 30,
                 category: None,
+                results: None,
             },
         );
         tasks.insert(
@@ -154,6 +155,7 @@ mod tests {
                 ready_when: None,
                 ready_timeout: 30,
                 category: None,
+                results: None,
             },
         );
         tasks.insert(
@@ -167,6 +169,7 @@ mod tests {
                 ready_when: None,
                 ready_timeout: 30,
                 category: None,
+                results: None,
             },
         );
 

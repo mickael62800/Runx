@@ -1,12 +1,15 @@
 use anyhow::Result;
+use chrono::Utc;
 use colored::Colorize;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 use crate::config::Config as RunxConfig;
+use crate::db::{Database, TaskResult as DbTaskResult};
 use crate::graph::{find_tasks_watching_file, get_dependent_tasks, topological_sort};
 use crate::task::execute_task;
 
@@ -17,14 +20,21 @@ pub struct TaskWatcher<'a> {
     config: &'a RunxConfig,
     base_dir: &'a Path,
     task_filter: Option<String>,
+    db: Option<Database>,
 }
 
 impl<'a> TaskWatcher<'a> {
-    pub fn new(config: &'a RunxConfig, base_dir: &'a Path, task_filter: Option<String>) -> Self {
+    pub fn new(
+        config: &'a RunxConfig,
+        base_dir: &'a Path,
+        task_filter: Option<String>,
+        db: Option<Database>,
+    ) -> Self {
         Self {
             config,
             base_dir,
             task_filter,
+            db,
         }
     }
 
@@ -64,49 +74,44 @@ impl<'a> TaskWatcher<'a> {
     fn event_loop(&self, rx: Receiver<Event>) -> Result<()> {
         let mut last_run = Instant::now() - Duration::from_secs(10);
 
-        loop {
-            match rx.recv() {
-                Ok(event) => {
-                    // Debounce
-                    if last_run.elapsed().as_millis() < DEBOUNCE_MS {
-                        continue;
-                    }
-
-                    // Process changed files
-                    let changed_files: Vec<String> = event
-                        .paths
-                        .iter()
-                        .filter_map(|p| {
-                            let path_str = p.to_string_lossy().to_string();
-
-                            // Skip excluded directories
-                            if EXCLUDED_DIRS.iter().any(|exc| path_str.contains(exc)) {
-                                return None;
-                            }
-
-                            // Convert to relative path
-                            p.strip_prefix(self.base_dir)
-                                .ok()
-                                .map(|rel| rel.to_string_lossy().replace('\\', "/"))
-                        })
-                        .collect();
-
-                    if changed_files.is_empty() {
-                        continue;
-                    }
-
-                    // Find tasks to run
-                    let tasks_to_run = self.find_tasks_to_run(&changed_files);
-
-                    if tasks_to_run.is_empty() {
-                        continue;
-                    }
-
-                    last_run = Instant::now();
-                    self.run_tasks(&tasks_to_run, &changed_files)?;
-                }
-                Err(_) => break,
+        while let Ok(event) = rx.recv() {
+            // Debounce
+            if last_run.elapsed().as_millis() < DEBOUNCE_MS {
+                continue;
             }
+
+            // Process changed files
+            let changed_files: Vec<String> = event
+                .paths
+                .iter()
+                .filter_map(|p| {
+                    let path_str = p.to_string_lossy().to_string();
+
+                    // Skip excluded directories
+                    if EXCLUDED_DIRS.iter().any(|exc| path_str.contains(exc)) {
+                        return None;
+                    }
+
+                    // Convert to relative path
+                    p.strip_prefix(self.base_dir)
+                        .ok()
+                        .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+                })
+                .collect();
+
+            if changed_files.is_empty() {
+                continue;
+            }
+
+            // Find tasks to run
+            let tasks_to_run = self.find_tasks_to_run(&changed_files);
+
+            if tasks_to_run.is_empty() {
+                continue;
+            }
+
+            last_run = Instant::now();
+            self.run_tasks(&tasks_to_run, &changed_files)?;
         }
 
         Ok(())
@@ -164,15 +169,49 @@ impl<'a> TaskWatcher<'a> {
             execution_order.join(" → ").cyan()
         );
 
+        // Create run in database
+        let run_id = Uuid::new_v4().to_string();
+        if let Some(ref db) = self.db {
+            db.create_run(&run_id, execution_order.len() as i32)?;
+        }
+
+        let mut passed = 0;
+        let mut failed = 0;
+
         // Execute tasks in order
         for name in &execution_order {
             if let Some(task) = self.config.get_task(name) {
+                let started_at = Utc::now();
                 let result = execute_task(name, task, self.base_dir)?;
-                if !result.success {
+
+                // Store in database
+                if let Some(ref db) = self.db {
+                    let db_result = DbTaskResult {
+                        id: Uuid::new_v4().to_string(),
+                        run_id: run_id.clone(),
+                        task_name: name.clone(),
+                        category: task.category.clone(),
+                        status: if result.success { "passed".to_string() } else { "failed".to_string() },
+                        duration_ms: result.duration_ms as i64,
+                        started_at,
+                        output: None,
+                    };
+                    db.insert_task_result(&db_result)?;
+                }
+
+                if result.success {
+                    passed += 1;
+                } else {
+                    failed += 1;
                     println!("{} Stopping due to failure\n", "!".yellow());
                     break;
                 }
             }
+        }
+
+        // Finish run in database
+        if let Some(ref db) = self.db {
+            db.finish_run(&run_id, passed, failed)?;
         }
 
         println!("{}", "Watching for changes...".dimmed());
