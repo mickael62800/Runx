@@ -1,8 +1,8 @@
 [package]
 name = "runx"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Universal CLI for task orchestration with live dashboard"
+description = "Universal CLI for task orchestration with live dashboard, parallel execution, and smart testing"
 
 [dependencies]
 # CLI
@@ -33,3 +33,16 @@ quick-xml = "0.31"
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+
+# v0.3.0 - New dependencies
+sha2 = "0.10"                    # Hash for cache
+hex = "0.4"                      # Hash encoding
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }  # HTTP client for notifications
+ratatui = "0.26"                 # TUI framework
+crossterm = "0.27"               # Terminal cross-platform
+git2 = "0.18"                    # Git operations
+shellexpand = "3"                # Environment variable expansion
+futures = "0.3"                  # Async utilities
+
+[dev-dependencies]
+tempfile = "3"                   # Temporary files for tests

@@ -1,106 +1,28 @@
+//! Database module for Runx
+//!
+//! Provides SQLite storage for:
+//! - Run history and task results
+//! - Test case details (JUnit parsing)
+//! - Flaky test detection
+//! - Cache metadata
+//! - Coverage results
+//! - Artifacts
+
+mod cache;
+mod flaky;
+mod queries;
+mod schema;
+
+pub use cache::*;
+pub use flaky::*;
+pub use queries::*;
+pub use schema::*;
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-
-const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS runs (
-    id TEXT PRIMARY KEY,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    status TEXT NOT NULL DEFAULT 'running',
-    total_tasks INTEGER NOT NULL DEFAULT 0,
-    passed INTEGER NOT NULL DEFAULT 0,
-    failed INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS task_results (
-    id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    task_name TEXT NOT NULL,
-    category TEXT,
-    status TEXT NOT NULL,
-    duration_ms INTEGER NOT NULL,
-    started_at TEXT NOT NULL,
-    output TEXT,
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-
-CREATE TABLE IF NOT EXISTS test_cases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_result_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    classname TEXT,
-    status TEXT NOT NULL,
-    duration_ms INTEGER,
-    error_message TEXT,
-    error_type TEXT,
-    FOREIGN KEY (task_result_id) REFERENCES task_results(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_results_run_id ON task_results(run_id);
-CREATE INDEX IF NOT EXISTS idx_test_cases_task_result_id ON test_cases(task_result_id);
-CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
-"#;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Run {
-    pub id: String,
-    pub started_at: DateTime<Utc>,
-    pub finished_at: Option<DateTime<Utc>>,
-    pub status: String,
-    pub total_tasks: i32,
-    pub passed: i32,
-    pub failed: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskResult {
-    pub id: String,
-    pub run_id: String,
-    pub task_name: String,
-    pub category: Option<String>,
-    pub status: String,
-    pub duration_ms: i64,
-    pub started_at: DateTime<Utc>,
-    pub output: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestCase {
-    pub id: i64,
-    pub task_result_id: String,
-    pub name: String,
-    pub classname: Option<String>,
-    pub status: String,
-    pub duration_ms: Option<i64>,
-    pub error_message: Option<String>,
-    pub error_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunSummary {
-    pub run: Run,
-    pub tasks: Vec<TaskResult>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DashboardStats {
-    pub total_runs: i32,
-    pub total_tasks_executed: i32,
-    pub overall_pass_rate: f64,
-    pub avg_duration_ms: i64,
-    pub recent_runs: Vec<Run>,
-    pub pass_rate_history: Vec<PassRatePoint>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PassRatePoint {
-    pub date: String,
-    pub pass_rate: f64,
-    pub run_count: i32,
-}
 
 pub struct Database {
     conn: Connection,
@@ -109,13 +31,20 @@ pub struct Database {
 impl Database {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch(SCHEMA)?;
+
+        // Run migrations
+        schema::run_migrations(&conn)?;
+
         Ok(Self { conn })
     }
 
     pub fn open_default() -> Result<Self> {
         let path = std::env::current_dir()?.join(".runx.db");
         Self::open(&path)
+    }
+
+    pub fn connection(&self) -> &Connection {
+        &self.conn
     }
 
     // === Runs ===
@@ -159,8 +88,7 @@ impl Database {
                 id: row.get(0)?,
                 started_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(1)?)?.with_timezone(&Utc),
                 finished_at: row.get::<_, Option<String>>(2)?
-                    .map(|s| DateTime::parse_from_rfc3339(&s).ok())
-                    .flatten()
+                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
                 status: row.get(3)?,
                 total_tasks: row.get(4)?,
@@ -357,4 +285,64 @@ impl Database {
             Ok(None)
         }
     }
+}
+
+// === Data Types ===
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Run {
+    pub id: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub status: String,
+    pub total_tasks: i32,
+    pub passed: i32,
+    pub failed: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskResult {
+    pub id: String,
+    pub run_id: String,
+    pub task_name: String,
+    pub category: Option<String>,
+    pub status: String,
+    pub duration_ms: i64,
+    pub started_at: DateTime<Utc>,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestCase {
+    pub id: i64,
+    pub task_result_id: String,
+    pub name: String,
+    pub classname: Option<String>,
+    pub status: String,
+    pub duration_ms: Option<i64>,
+    pub error_message: Option<String>,
+    pub error_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunSummary {
+    pub run: Run,
+    pub tasks: Vec<TaskResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub total_runs: i32,
+    pub total_tasks_executed: i32,
+    pub overall_pass_rate: f64,
+    pub avg_duration_ms: i64,
+    pub recent_runs: Vec<Run>,
+    pub pass_rate_history: Vec<PassRatePoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PassRatePoint {
+    pub date: String,
+    pub pass_rate: f64,
+    pub run_count: i32,
 }

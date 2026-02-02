@@ -1,3 +1,5 @@
+//! Topological sorting for task dependency resolution
+
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -123,10 +125,31 @@ pub fn get_dependent_tasks(config: &Config, task_name: &str) -> HashSet<String> 
     dependents
 }
 
+/// Get all dependencies of a task (directly or indirectly)
+pub fn get_task_dependencies(config: &Config, task_name: &str) -> HashSet<String> {
+    let mut dependencies: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    queue.push_back(task_name.to_string());
+
+    while let Some(current) = queue.pop_front() {
+        if let Some(task) = config.get_task(&current) {
+            for dep in &task.depends_on {
+                if !dependencies.contains(dep) {
+                    dependencies.insert(dep.clone());
+                    queue.push_back(dep.clone());
+                }
+            }
+        }
+    }
+
+    dependencies
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{Config, Project, Task};
+    use std::collections::HashMap;
 
     fn create_test_config() -> Config {
         let mut tasks = HashMap::new();
@@ -142,6 +165,19 @@ mod tests {
                 ready_timeout: 30,
                 category: None,
                 results: None,
+                parallel: false,
+                workers: None,
+                retry: 0,
+                retry_delay_ms: 1000,
+                timeout_seconds: None,
+                coverage: false,
+                coverage_format: None,
+                coverage_path: None,
+                coverage_threshold: None,
+                artifacts: vec![],
+                env: HashMap::new(),
+                inputs: vec![],
+                outputs: vec![],
             },
         );
         tasks.insert(
@@ -156,6 +192,19 @@ mod tests {
                 ready_timeout: 30,
                 category: None,
                 results: None,
+                parallel: false,
+                workers: None,
+                retry: 0,
+                retry_delay_ms: 1000,
+                timeout_seconds: None,
+                coverage: false,
+                coverage_format: None,
+                coverage_path: None,
+                coverage_threshold: None,
+                artifacts: vec![],
+                env: HashMap::new(),
+                inputs: vec![],
+                outputs: vec![],
             },
         );
         tasks.insert(
@@ -170,13 +219,32 @@ mod tests {
                 ready_timeout: 30,
                 category: None,
                 results: None,
+                parallel: false,
+                workers: None,
+                retry: 0,
+                retry_delay_ms: 1000,
+                timeout_seconds: None,
+                coverage: false,
+                coverage_format: None,
+                coverage_path: None,
+                coverage_threshold: None,
+                artifacts: vec![],
+                env: HashMap::new(),
+                inputs: vec![],
+                outputs: vec![],
             },
         );
 
         Config {
             project: Project {
                 name: "test".to_string(),
+                default_profile: None,
             },
+            profiles: HashMap::new(),
+            workspaces: None,
+            notifications: None,
+            cache: None,
+            ai: None,
             tasks,
         }
     }
@@ -197,6 +265,14 @@ mod tests {
         let config = create_test_config();
         let deps = get_dependent_tasks(&config, "build");
         assert!(deps.contains("test"));
+        assert!(!deps.contains("lint"));
+    }
+
+    #[test]
+    fn test_get_task_dependencies() {
+        let config = create_test_config();
+        let deps = get_task_dependencies(&config, "test");
+        assert!(deps.contains("build"));
         assert!(!deps.contains("lint"));
     }
 }

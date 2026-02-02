@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -254,5 +254,70 @@ pub fn start_background_task(
     Ok(BackgroundProcess {
         name: name.to_string(),
         child,
+    })
+}
+
+/// Async version of execute_task for parallel execution
+pub async fn execute_task_async(name: String, task: Task, base_dir: PathBuf) -> Result<TaskResult> {
+    // Spawn blocking because we use std::process
+    let result = tokio::task::spawn_blocking(move || {
+        execute_task_inner(&name, &task, &base_dir)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Task join error: {}", e))??;
+
+    Ok(result)
+}
+
+/// Inner task execution (used by both sync and async versions)
+fn execute_task_inner(name: &str, task: &Task, base_dir: &Path) -> Result<TaskResult> {
+    let start = Instant::now();
+
+    let work_dir = match &task.cwd {
+        Some(cwd) => base_dir.join(cwd),
+        None => base_dir.to_path_buf(),
+    };
+
+    println!(
+        "{} {} {}",
+        "▶".blue(),
+        "Running".bold(),
+        name.cyan()
+    );
+    println!("  {} {}", "cmd:".dimmed(), task.cmd.dimmed());
+
+    let mut command = create_command(&task.cmd, &work_dir);
+    command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+    let output = command
+        .output()
+        .with_context(|| format!("Failed to execute task '{}' in '{}'", name, work_dir.display()))?;
+
+    let duration = start.elapsed().as_millis();
+    let success = output.status.success();
+
+    if success {
+        println!(
+            "{} {} {} ({}ms)\n",
+            "✓".green(),
+            name.green(),
+            "completed".green(),
+            duration
+        );
+    } else {
+        println!(
+            "{} {} {} ({}ms)\n",
+            "✗".red(),
+            name.red(),
+            "failed".red(),
+            duration
+        );
+    }
+
+    Ok(TaskResult {
+        name: name.to_string(),
+        success,
+        duration_ms: duration,
+        category: task.category.clone(),
     })
 }
