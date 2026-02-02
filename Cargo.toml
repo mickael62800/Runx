@@ -1,8 +1,8 @@
 [package]
 name = "runx"
-version = "0.3.0"
+version = "1.0.0"
 edition = "2021"
-description = "Universal CLI for task orchestration with live dashboard, parallel execution, and smart testing"
+description = "Rust Test Explorer - Discover, run, and manage tests with TUI"
 
 [dependencies]
 # CLI
@@ -10,39 +10,25 @@ clap = { version = "4", features = ["derive"] }
 colored = "2"
 anyhow = "1"
 
-# Config
-toml = "0.8"
+# Config & serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # File watching
 notify = "6"
-glob = "0.3"
 
-# Web server
-axum = { version = "0.7", features = ["ws"] }
-tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5", features = ["fs", "cors"] }
+# Async runtime (for potential future use)
+tokio = { version = "1", features = ["rt", "sync"] }
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
 
-# JUnit XML parsing
-quick-xml = "0.31"
-
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4"] }
 
-# v0.3.0 - New dependencies
-sha2 = "0.10"                    # Hash for cache
-hex = "0.4"                      # Hash encoding
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }  # HTTP client for notifications
-ratatui = "0.26"                 # TUI framework
-crossterm = "0.27"               # Terminal cross-platform
-git2 = "0.18"                    # Git operations
-shellexpand = "3"                # Environment variable expansion
-futures = "0.3"                  # Async utilities
+# TUI
+ratatui = "0.26"
+crossterm = "0.27"
 
 [dev-dependencies]
-tempfile = "3"                   # Temporary files for tests
+tempfile = "3"

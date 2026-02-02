@@ -1,9 +1,9 @@
 //! Terminal User Interface module
 //!
 //! Provides:
-//! - Interactive task list
-//! - Real-time log viewer
-//! - Keyboard controls
+//! - Interactive test explorer with tree view
+//! - Real-time test output viewer
+//! - Keyboard controls for navigation and test execution
 
 mod app;
 mod events;
@@ -13,6 +13,7 @@ mod widgets;
 pub use app::*;
 pub use events::*;
 pub use ui::*;
+pub use widgets::*;
 
 use anyhow::Result;
 use crossterm::{
@@ -24,11 +25,10 @@ use ratatui::prelude::*;
 use std::io;
 use std::path::Path;
 
-use crate::config::Config;
 use crate::db::Database;
 
 /// Run the TUI application
-pub fn run_tui(config: &Config, base_dir: &Path, db: Option<Database>) -> Result<()> {
+pub fn run_tui(project_dir: &Path, db: Option<Database>) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -37,7 +37,10 @@ pub fn run_tui(config: &Config, base_dir: &Path, db: Option<Database>) -> Result
     let mut terminal = Terminal::new(backend)?;
 
     // Create app state
-    let mut app = App::new(config, base_dir, db);
+    let mut app = App::new(project_dir, db);
+
+    // Auto-discover tests on startup
+    let _ = app.discover_tests();
 
     // Run main loop
     let result = run_app(&mut terminal, &mut app);
@@ -66,7 +69,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> 
             }
         }
 
-        // Update task status if running
+        // Update test status if running
         app.update();
     }
 

@@ -2,7 +2,7 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, StatefulWidget, Widget},
+    widgets::{Block, StatefulWidget, Widget},
 };
 
 use crate::tui::app::TuiTask;

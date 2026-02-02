@@ -149,7 +149,6 @@ fn render_line_with_highlight(
     pattern: &str,
     highlight_style: Style,
 ) {
-    let line_lower = line.to_lowercase();
     let pattern_lower = pattern.to_lowercase();
 
     let mut current_x = x;
