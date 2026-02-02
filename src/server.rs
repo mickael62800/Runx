@@ -6,7 +6,7 @@ use axum::{
     },
     http::StatusCode,
     response::{Html, IntoResponse, Json},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,7 @@ pub enum WsMessage {
 pub struct AppState {
     pub db_path: std::path::PathBuf,
     pub tx: broadcast::Sender<WsMessage>,
+    pub shutdown_tx: broadcast::Sender<()>,
 }
 
 impl AppState {
@@ -40,14 +41,16 @@ impl AppState {
 
 pub async fn start_server(port: u16, db_path: std::path::PathBuf) -> Result<()> {
     let (tx, _) = broadcast::channel::<WsMessage>(100);
+    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
 
-    let state = Arc::new(AppState { db_path, tx });
+    let state = Arc::new(AppState { db_path, tx, shutdown_tx });
 
     let app = Router::new()
         .route("/", get(serve_dashboard))
         .route("/api/stats", get(get_stats))
         .route("/api/runs", get(get_runs))
         .route("/api/runs/:id", get(get_run))
+        .route("/api/shutdown", post(shutdown_handler))
         .route("/ws", get(ws_handler))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -56,8 +59,24 @@ pub async fn start_server(port: u16, db_path: std::path::PathBuf) -> Result<()> 
     println!("🚀 Dashboard running at http://localhost:{}", port);
     println!("   Press Ctrl+C to stop\n");
 
-    axum::serve(listener, app).await?;
+    tokio::select! {
+        result = axum::serve(listener, app) => {
+            result?;
+        }
+        _ = shutdown_rx.recv() => {
+            println!("\n✓ Server stopped via dashboard");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            println!("\n✓ Server stopped via Ctrl+C");
+        }
+    }
+
     Ok(())
+}
+
+async fn shutdown_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let _ = state.shutdown_tx.send(());
+    "Server shutting down"
 }
 
 async fn serve_dashboard() -> Html<&'static str> {

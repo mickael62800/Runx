@@ -285,6 +285,83 @@ impl Database {
             Ok(None)
         }
     }
+
+    // === History Management ===
+
+    /// Clear all run history from the database
+    /// Deletes in order to respect foreign key constraints
+    pub fn clear_all_history(&self) -> Result<usize> {
+        let mut total_deleted = 0;
+
+        // Delete in reverse order of dependencies
+        // artifacts depends on task_results
+        total_deleted += self.conn.execute("DELETE FROM artifacts", [])?;
+
+        // coverage_results depends on task_results
+        total_deleted += self.conn.execute("DELETE FROM coverage_results", [])?;
+
+        // test_cases depends on task_results
+        total_deleted += self.conn.execute("DELETE FROM test_cases", [])?;
+
+        // test_history is standalone
+        total_deleted += self.conn.execute("DELETE FROM test_history", [])?;
+
+        // task_results depends on runs
+        total_deleted += self.conn.execute("DELETE FROM task_results", [])?;
+
+        // runs is the root table
+        total_deleted += self.conn.execute("DELETE FROM runs", [])?;
+
+        Ok(total_deleted)
+    }
+
+    /// Get statistics about stored history
+    pub fn get_history_stats(&self) -> Result<HistoryStats> {
+        let total_runs: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM runs",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let total_task_results: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM task_results",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let total_test_cases: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM test_cases",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let total_test_history: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM test_history",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let total_coverage_results: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM coverage_results",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let total_artifacts: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM artifacts",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(HistoryStats {
+            total_runs,
+            total_task_results,
+            total_test_cases,
+            total_test_history,
+            total_coverage_results,
+            total_artifacts,
+        })
+    }
 }
 
 // === Data Types ===
@@ -345,4 +422,14 @@ pub struct PassRatePoint {
     pub date: String,
     pub pass_rate: f64,
     pub run_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryStats {
+    pub total_runs: i32,
+    pub total_task_results: i32,
+    pub total_test_cases: i32,
+    pub total_test_history: i32,
+    pub total_coverage_results: i32,
+    pub total_artifacts: i32,
 }

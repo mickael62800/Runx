@@ -184,6 +184,21 @@
             font-size: 12px;
             color: #26a69a;
         }
+        .stop-btn {
+            background: #4a1c1c;
+            border: 1px solid #ef5350;
+            color: #ef5350;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .stop-btn:hover {
+            background: #ef5350;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -194,6 +209,7 @@
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Connected</span>
             </div>
+            <button onclick="stopServer()" class="stop-btn">Stop Server</button>
         </div>
     </div>
 
@@ -497,6 +513,20 @@
             trendChart?.resize();
             resultsChart?.resize();
         });
+
+        async function stopServer() {
+            if (confirm('Stop the server?')) {
+                try {
+                    await fetch('/api/shutdown', { method: 'POST' });
+                    document.getElementById('statusDot').classList.add('disconnected');
+                    document.getElementById('statusText').textContent = 'Server stopped';
+                } catch (e) {
+                    // Server might close before response
+                    document.getElementById('statusDot').classList.add('disconnected');
+                    document.getElementById('statusText').textContent = 'Server stopped';
+                }
+            }
+        }
 
         connect();
         fetchStats();

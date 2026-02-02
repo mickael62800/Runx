@@ -150,6 +150,12 @@ enum Commands {
         #[command(subcommand)]
         action: AnnotateAction,
     },
+
+    /// Run history management
+    History {
+        #[command(subcommand)]
+        action: HistoryAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -164,6 +170,14 @@ enum CacheAction {
 enum ProfileAction {
     /// List available profiles
     List,
+}
+
+#[derive(Subcommand)]
+enum HistoryAction {
+    /// Clear all run history
+    Clear,
+    /// Show history statistics
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -291,6 +305,7 @@ fn run() -> Result<()> {
         Commands::Cache { action } => cmd_cache(&db_path, action),
         Commands::Profiles { action } => cmd_profiles(&config, action),
         Commands::Annotate { action } => cmd_annotate(&config, &base_dir, &db_path, action),
+        Commands::History { action } => cmd_history(&db_path, action),
     }
 }
 
@@ -589,6 +604,37 @@ fn cmd_profiles(config: &Config, action: ProfileAction) -> Result<()> {
             if let Some(ref default) = config.project.default_profile {
                 println!("\n  Default profile: {}", default.cyan());
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_history(db_path: &Path, action: HistoryAction) -> Result<()> {
+    let db = Database::open(db_path)?;
+
+    match action {
+        HistoryAction::Clear => {
+            let deleted = db.clear_all_history()?;
+            println!("{} Cleared {} history records", "✓".green(), deleted);
+        }
+        HistoryAction::Show => {
+            let stats = db.get_history_stats()?;
+            println!("\n{}", "History Statistics:".bold());
+            println!("  Runs:             {}", stats.total_runs.to_string().cyan());
+            println!("  Task results:     {}", stats.total_task_results.to_string().cyan());
+            println!("  Test cases:       {}", stats.total_test_cases.to_string().cyan());
+            println!("  Test history:     {}", stats.total_test_history.to_string().cyan());
+            println!("  Coverage results: {}", stats.total_coverage_results.to_string().cyan());
+            println!("  Artifacts:        {}", stats.total_artifacts.to_string().cyan());
+
+            let total = stats.total_runs
+                + stats.total_task_results
+                + stats.total_test_cases
+                + stats.total_test_history
+                + stats.total_coverage_results
+                + stats.total_artifacts;
+            println!("\n  {}: {}", "Total records".bold(), total.to_string().green());
         }
     }
 
