@@ -1,6 +1,8 @@
 # Runx
 
-CLI universel pour orchestrer des tâches avec watch intelligent et dashboard HTML.
+CLI universel pour orchestrer des tâches avec watch intelligent et **live dashboard**.
+
+> Version 0.2.0 - Maintenant avec dashboard temps réel et base de données SQLite
 
 ## Installation
 
@@ -57,9 +59,10 @@ runx run
 | Commande | Description |
 |----------|-------------|
 | `runx run [task]` | Exécute une tâche (ou toutes) |
-| `runx run --report` | Exécute et génère un dashboard HTML |
+| `runx run --report` | Exécute et génère un dashboard HTML statique |
 | `runx watch [task]` | Surveille les fichiers et relance |
 | `runx list` | Liste les tâches disponibles |
+| `runx serve` | Lance le **live dashboard** temps réel |
 
 ### Options
 
@@ -83,6 +86,7 @@ cwd = "sous-dossier"              # Optionnel: répertoire de travail
 watch = ["src/**/*.rs"]           # Optionnel: patterns glob à surveiller
 depends_on = ["autre-tache"]      # Optionnel: dépendances
 category = "unit"                 # Optionnel: catégorie (unit, e2e, integration...)
+results = "test-results.xml"      # Optionnel: chemin JUnit XML pour parsing détaillé
 background = false                # Optionnel: tâche en arrière-plan
 ready_when = "Server running"     # Optionnel: texte indiquant que le service est prêt
 ready_timeout = 30                # Optionnel: timeout en secondes (défaut: 30)
@@ -133,15 +137,46 @@ Runx :
 3. Exécute les tests E2E
 4. Arrête le serveur automatiquement
 
-## Dashboard HTML
+## Live Dashboard (v0.2.0)
 
-Générer un rapport interactif :
+Lancer le dashboard temps réel :
+
+```bash
+runx serve              # Port 3000 par défaut
+runx serve --port 8080  # Port personnalisé
+```
+
+Ouvrez http://localhost:3000 dans votre navigateur.
+
+### Fonctionnalités
+
+- **Mise à jour temps réel** via WebSocket
+- **Base de données SQLite** pour l'historique des runs
+- **Statistiques** : total runs, taux de réussite, durée moyenne
+- **Graphiques ECharts** : tendances sur 7 jours, résultats récents
+- **Historique** : sidebar cliquable avec détails de chaque run
+- **Filtrage** par catégorie (unit, integration, e2e, lint...)
+
+### Parsing JUnit XML
+
+Runx peut parser les rapports JUnit XML pour des détails précis :
+
+```toml
+[tasks.test]
+cmd = "cargo test -- --format=junit > results.xml"
+results = "results.xml"   # Chemin vers le fichier JUnit XML
+category = "unit"
+```
+
+## Dashboard HTML (statique)
+
+Générer un rapport HTML statique (sans serveur) :
 
 ```bash
 runx run --report
 ```
 
-Le dashboard inclut :
+Le dashboard statique inclut :
 - Résumé global (passed/failed/durée)
 - Graphique timeline des durées
 - Graphique pie chart pass/fail
