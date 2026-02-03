@@ -47,3 +47,6 @@ crossterm = "0.27"
 
 [dev-dependencies]
 tempfile = "3"
+
+[workspace]
+members = ["crates/runx-tauri"]
