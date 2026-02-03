@@ -3,7 +3,8 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-/// Current schema version
+/// Current schema version (used for documentation/debugging)
+#[allow(dead_code)]
 const SCHEMA_VERSION: i32 = 3;
 
 /// Run all pending migrations

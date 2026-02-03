@@ -2,8 +2,9 @@
 //!
 //! Executes Rust tests with streaming output and real-time status updates.
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
-use chrono::Utc;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -11,7 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
 
-use crate::test_model::{TestNode, TestStatus};
+use crate::test_model::TestStatus;
 
 /// Event from the test runner
 #[derive(Debug, Clone)]
@@ -84,6 +85,11 @@ impl TestRunner {
         }
 
         Ok(total_result)
+    }
+
+    /// Run specific tests by name (alias for run_tests)
+    pub fn run_specific(&self, test_names: &[String]) -> Result<TestRunResult> {
+        self.run_tests(test_names)
     }
 
     fn run_tests_internal(&self, filter: Option<&str>, _include_ignored: bool) -> Result<TestRunResult> {
@@ -159,7 +165,7 @@ impl TestRunner {
                         let test_result = SingleTestResult {
                             name: test_info.name.clone(),
                             status: test_info.status,
-                            duration_ms: 0,
+                            duration_ms: Some(0),
                             output: Vec::new(),
                         };
 
@@ -200,8 +206,7 @@ impl TestRunner {
                     };
 
                     let duration_ms = test_start
-                        .map(|s| s.elapsed().as_millis() as u64)
-                        .unwrap_or(0);
+                        .map(|s| s.elapsed().as_millis() as u64);
 
                     let test_result = SingleTestResult {
                         name: test_name.clone(),
@@ -222,7 +227,7 @@ impl TestRunner {
                         let _ = tx.send(TestEvent::Completed {
                             test_name: test_name.clone(),
                             status,
-                            duration_ms,
+                            duration_ms: duration_ms.unwrap_or(0),
                         });
                     }
 
@@ -316,7 +321,7 @@ fn parse_test_line(line: &str) -> Option<TestLineInfo> {
 pub struct SingleTestResult {
     pub name: String,
     pub status: TestStatus,
-    pub duration_ms: u64,
+    pub duration_ms: Option<u64>,
     pub output: Vec<String>,
 }
 
@@ -359,19 +364,6 @@ pub fn run_tests_async(
             runner.run_all()
         }
     })
-}
-
-/// Update test tree with results
-pub fn update_tree_with_results(tree: &mut TestNode, results: &TestRunResult) {
-    for result in &results.test_results {
-        if let Some(test) = tree.find_test_mut(&result.name) {
-            test.status = result.status;
-            test.duration_ms = Some(result.duration_ms);
-            test.output = result.output.clone();
-            test.last_run = Some(Utc::now());
-        }
-    }
-    tree.update_counts();
 }
 
 #[cfg(test)]

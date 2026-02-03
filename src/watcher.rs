@@ -22,7 +22,8 @@ const EXCLUDED_DIRS: &[&str] = &["target", "node_modules", "dist", "out", ".git"
 pub struct TestWatcher<'a> {
     project_dir: &'a Path,
     test_filter: Option<String>,
-    db: Option<Database>,
+    #[allow(dead_code)]
+    db: Option<Database>, // Reserved for future: saving watch results to DB
     test_tree: Option<TestNode>,
 }
 

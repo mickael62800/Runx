@@ -1,6 +1,7 @@
 //! Test Explorer TUI application state
 
-use std::collections::VecDeque;
+#![allow(dead_code)]
+
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -433,65 +434,3 @@ impl App {
     }
 }
 
-// Keep old types for backward compatibility during transition
-// These will be removed in cleanup phase
-
-/// Task status in TUI (legacy)
-#[derive(Debug, Clone, PartialEq)]
-pub enum TaskStatus {
-    Pending,
-    Running,
-    Passed,
-    Failed,
-    Skipped,
-}
-
-impl TaskStatus {
-    pub fn symbol(&self) -> &'static str {
-        match self {
-            TaskStatus::Pending => "○",
-            TaskStatus::Running => "●",
-            TaskStatus::Passed => "✓",
-            TaskStatus::Failed => "✗",
-            TaskStatus::Skipped => "⊘",
-        }
-    }
-
-    pub fn color(&self) -> ratatui::style::Color {
-        use ratatui::style::Color;
-        match self {
-            TaskStatus::Pending => Color::Gray,
-            TaskStatus::Running => Color::Yellow,
-            TaskStatus::Passed => Color::Green,
-            TaskStatus::Failed => Color::Red,
-            TaskStatus::Skipped => Color::DarkGray,
-        }
-    }
-}
-
-/// A task in the TUI (legacy)
-#[derive(Debug, Clone)]
-pub struct TuiTask {
-    pub name: String,
-    pub status: TaskStatus,
-    pub duration_ms: Option<u128>,
-    pub output: VecDeque<String>,
-}
-
-impl TuiTask {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            status: TaskStatus::Pending,
-            duration_ms: None,
-            output: VecDeque::with_capacity(1000),
-        }
-    }
-
-    pub fn add_output(&mut self, line: String) {
-        self.output.push_back(line);
-        while self.output.len() > 1000 {
-            self.output.pop_front();
-        }
-    }
-}

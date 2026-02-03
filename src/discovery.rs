@@ -26,23 +26,6 @@ pub fn discover_tests(project_dir: &Path) -> Result<TestNode> {
     Ok(root)
 }
 
-/// Discover tests matching a filter pattern
-pub fn discover_tests_filtered(project_dir: &Path, filter: &str) -> Result<TestNode> {
-    let output = run_cargo_test_list_filtered(project_dir, filter)?;
-    let tests = parse_test_list(&output);
-
-    let mut root = TestNode::new_module("tests");
-
-    for test in tests {
-        root.add_test(test);
-    }
-
-    root.sort_children();
-    root.update_counts();
-
-    Ok(root)
-}
-
 /// Run `cargo test -- --list` and capture output
 fn run_cargo_test_list(project_dir: &Path) -> Result<String> {
     let output = Command::new("cargo")
@@ -57,26 +40,6 @@ fn run_cargo_test_list(project_dir: &Path) -> Result<String> {
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
     // Also check stderr for any errors
-    if !output.status.success() && stdout.is_empty() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("cargo test --list failed: {}", stderr);
-    }
-
-    Ok(stdout)
-}
-
-/// Run `cargo test <filter> -- --list` and capture output
-fn run_cargo_test_list_filtered(project_dir: &Path, filter: &str) -> Result<String> {
-    let output = Command::new("cargo")
-        .args(["test", filter, "--", "--list"])
-        .current_dir(project_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .context("Failed to execute cargo test --list")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-
     if !output.status.success() && stdout.is_empty() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("cargo test --list failed: {}", stderr);

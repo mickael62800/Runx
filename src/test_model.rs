@@ -3,13 +3,17 @@
 //! Core data structures for representing discovered tests, their status,
 //! and the hierarchical test tree.
 
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Status of a test
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TestStatus {
     /// Test has never been run
+    #[default]
     Pending,
     /// Test is currently running
     Running,
@@ -44,11 +48,6 @@ impl TestStatus {
     }
 }
 
-impl Default for TestStatus {
-    fn default() -> Self {
-        TestStatus::Pending
-    }
-}
 
 /// A discovered test
 #[derive(Debug, Clone, Serialize, Deserialize)]

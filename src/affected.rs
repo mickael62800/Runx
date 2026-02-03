@@ -39,7 +39,7 @@ impl AffectedTestsMap {
             for path in source_paths {
                 map.file_to_tests
                     .entry(path.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(test.full_name.clone());
             }
 

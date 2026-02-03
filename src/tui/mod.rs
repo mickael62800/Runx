@@ -10,10 +10,8 @@ mod events;
 mod ui;
 mod widgets;
 
-pub use app::*;
-pub use events::*;
-pub use ui::*;
-pub use widgets::*;
+pub use app::App;
+pub use events::EventResult;
 
 use anyhow::Result;
 use crossterm::{

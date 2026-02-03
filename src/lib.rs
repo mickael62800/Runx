@@ -6,7 +6,10 @@
 //! - Real-time test execution with streaming output
 //! - Watch mode with affected test detection
 //! - Terminal UI with tree view
+//! - Web dashboard with real-time updates
+//! - HTML report generation
 
+// Core modules
 pub mod affected;
 pub mod db;
 pub mod discovery;
@@ -15,6 +18,14 @@ pub mod test_runner;
 pub mod tui;
 pub mod watcher;
 
+// Dashboard & reporting
+pub mod artifacts;
+pub mod report;
+pub mod server;
+pub mod task;
+
+// Re-exports
 pub use discovery::{discover_all_tests, discover_tests, get_project_name, is_rust_project};
 pub use test_model::{FilterMode, Test, TestNode, TestStats, TestStatus};
 pub use test_runner::{TestEvent, TestRunResult, TestRunner};
+pub use server::start_server;

@@ -39,6 +39,94 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .tab-btn {
+            background: #1a1a2e;
+            border: 1px solid #2d2d44;
+            color: #888;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { background: #2d2d44; color: #e0e0e0; }
+        .tab-btn.active { background: #00d4ff; color: #0a0a0f; border-color: #00d4ff; }
+        .debug-panel { display: none; height: calc(100vh - 60px); }
+        .debug-panel.active { display: flex; }
+        .debug-sidebar {
+            width: 200px;
+            background: #12121a;
+            border-right: 1px solid #2d2d44;
+            padding: 15px;
+        }
+        .debug-filter {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .debug-filter label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e0e0e0;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .debug-filter input[type="checkbox"] {
+            accent-color: #00d4ff;
+        }
+        .debug-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        .debug-event {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #2d2d44;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .debug-event.pinia { border-left-color: #42b883; }
+        .debug-event.tauri { border-left-color: #ffc131; }
+        .debug-event.vue { border-left-color: #42b883; }
+        .debug-event.error { border-left-color: #ef5350; background: #2a1a1a; }
+        .debug-event .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .debug-event .event-source {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .debug-event .event-source.pinia { background: #1b3d2f; color: #42b883; }
+        .debug-event .event-source.tauri { background: #3d3100; color: #ffc131; }
+        .debug-event .event-source.vue { background: #1b3d2f; color: #42b883; }
+        .debug-event .event-source.error { background: #4a1c1c; color: #ef5350; }
+        .debug-event .event-time { color: #666; font-size: 11px; }
+        .debug-event .event-name { color: #00d4ff; font-weight: bold; margin-bottom: 5px; }
+        .debug-event .event-type { color: #888; font-size: 11px; }
+        .debug-event .event-payload {
+            background: #0a0a0f;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: #e0e0e0;
+        }
+        .debug-event .event-error { color: #ef5350; margin-top: 5px; }
         .main { display: flex; height: calc(100vh - 60px); }
         .sidebar {
             width: 300px;
@@ -177,6 +265,23 @@
             color: #666;
         }
         .empty-state h2 { margin-bottom: 10px; color: #888; }
+        .artifact-tab {
+            background: #1a1a2e;
+            border: 1px solid #2d2d44;
+            color: #888;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .artifact-tab:hover { background: #2d2d44; color: #e0e0e0; }
+        .artifact-tab.active { background: #00d4ff; color: #0a0a0f; border-color: #00d4ff; }
+        .artifact-tab.active[data-category="performance"] { background: #f59e0b; border-color: #f59e0b; }
+        .artifact-tab.active[data-category="memory"] { background: #8b5cf6; border-color: #8b5cf6; }
+        .artifact-tab.active[data-category="api"] { background: #10b981; border-color: #10b981; }
+        .artifact-tab.active[data-category="coverage"] { background: #3b82f6; border-color: #3b82f6; }
+        .artifact-tab.active[data-category="trading"] { background: #ef4444; border-color: #ef4444; }
         .live-indicator {
             display: flex;
             align-items: center;
@@ -204,6 +309,10 @@
 <body>
     <div class="header">
         <h1>🚀 Runx Dashboard</h1>
+        <div class="tabs" style="display:flex;gap:5px;">
+            <button onclick="showTab('tests')" id="tab-tests" class="tab-btn active">🧪 Tests</button>
+            <button onclick="showTab('debug')" id="tab-debug" class="tab-btn">🐛 Debug</button>
+        </div>
         <div class="status">
             <div class="live-indicator">
                 <div class="status-dot" id="statusDot"></div>
@@ -213,9 +322,17 @@
         </div>
     </div>
 
-    <div class="main">
+    <div class="main" id="panel-tests">
         <div class="sidebar">
-            <div class="sidebar-header">Recent Runs</div>
+            <div style="padding:10px;border-bottom:1px solid #2d2d44;">
+                <input type="text" id="searchInput" placeholder="🔍 Search tests..."
+                    oninput="filterTests(this.value)"
+                    style="width:100%;padding:8px 12px;background:#1a1a2e;border:1px solid #2d2d44;border-radius:6px;color:#e0e0e0;font-size:13px;outline:none;">
+            </div>
+            <div class="sidebar-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Recent Runs</span>
+                <button onclick="clearHistory()" style="background:#4a1c1c;border:1px solid #ef5350;color:#ef5350;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Clear</button>
+            </div>
             <div class="runs-list" id="runsList"></div>
         </div>
 
@@ -260,6 +377,19 @@
                         <div class="tasks-list" id="currentTasks"></div>
                     </div>
                 </div>
+
+                <div id="artifactsSection" style="display: none;">
+                    <h2 style="color: #00d4ff; margin-bottom: 15px;">📊 Test Artifacts</h2>
+                    <div class="artifact-tabs" style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">
+                        <button onclick="filterArtifactCategory('all')" class="artifact-tab active" data-category="all">📊 All</button>
+                        <button onclick="filterArtifactCategory('performance')" class="artifact-tab" data-category="performance">⚡ Performance</button>
+                        <button onclick="filterArtifactCategory('memory')" class="artifact-tab" data-category="memory">🧠 Memory</button>
+                        <button onclick="filterArtifactCategory('api')" class="artifact-tab" data-category="api">🌐 API</button>
+                        <button onclick="filterArtifactCategory('coverage')" class="artifact-tab" data-category="coverage">📈 Coverage</button>
+                        <button onclick="filterArtifactCategory('trading')" class="artifact-tab" data-category="trading">💹 Trading</button>
+                    </div>
+                    <div class="charts-row" id="artifactsCharts"></div>
+                </div>
             </div>
 
             <div id="runDetail" class="run-detail">
@@ -289,12 +419,43 @@
         </div>
     </div>
 
+    <!-- Debug Panel -->
+    <div class="debug-panel" id="panel-debug">
+        <div class="debug-sidebar">
+            <h3 style="color:#00d4ff;margin-bottom:15px;">Filters</h3>
+            <div class="debug-filter">
+                <label><input type="checkbox" checked onchange="toggleDebugFilter('pinia')"> 🍍 Pinia</label>
+                <label><input type="checkbox" checked onchange="toggleDebugFilter('tauri')"> ⚡ Tauri</label>
+                <label><input type="checkbox" checked onchange="toggleDebugFilter('vue')"> 💚 Vue</label>
+                <label><input type="checkbox" checked onchange="toggleDebugFilter('error')"> ❌ Errors</label>
+            </div>
+            <hr style="border-color:#2d2d44;margin:15px 0;">
+            <button onclick="clearDebugEvents()" style="width:100%;background:#4a1c1c;border:1px solid #ef5350;color:#ef5350;padding:8px;border-radius:6px;cursor:pointer;">Clear Events</button>
+            <div style="margin-top:15px;color:#666;font-size:11px;">
+                <div id="debugEventCount">0 events</div>
+            </div>
+            <hr style="border-color:#2d2d44;margin:15px 0;">
+            <div style="color:#888;font-size:11px;">
+                <strong>Integration:</strong><br><br>
+                POST to <code style="color:#00d4ff;">/api/debug</code>
+            </div>
+        </div>
+        <div class="debug-content" id="debugEvents">
+            <div style="text-align:center;padding:60px;color:#666;">
+                <h2 style="margin-bottom:10px;color:#888;">🐛 Debug Console</h2>
+                <p>Waiting for events from your Vue/Tauri app...</p>
+                <p style="margin-top:20px;font-size:12px;">Send events to <code style="color:#00d4ff;">POST /api/debug</code></p>
+            </div>
+        </div>
+    </div>
+
     <script>
         let ws;
         let stats = null;
         let currentRunId = null;
         let currentRunTasks = [];
         let trendChart, resultsChart;
+        let artifactCharts = {};
 
         function connect() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -343,6 +504,17 @@
                     currentRunId = null;
                     document.getElementById('currentRun').style.display = 'none';
                     fetchStats();
+                    break;
+                case 'ArtifactsUpdated':
+                    // Reload artifacts when notified
+                    setTimeout(() => fetchArtifacts(), 300);
+                    break;
+                case 'FileChanged':
+                    console.log('Files changed:', msg.data.files);
+                    showNotification('🔄 Files changed, running tests...');
+                    break;
+                case 'DebugEvent':
+                    addDebugEvent(msg.data);
                     break;
             }
         }
@@ -512,7 +684,429 @@
         window.addEventListener('resize', () => {
             trendChart?.resize();
             resultsChart?.resize();
+            Object.values(artifactCharts).forEach(c => c?.resize());
         });
+
+        async function fetchArtifacts() {
+            try {
+                const resp = await fetch('/api/artifacts');
+                const artifacts = await resp.json();
+                renderArtifacts(artifacts);
+            } catch (e) {
+                console.log('No artifacts available');
+            }
+        }
+
+        let currentArtifactCategory = 'all';
+
+        function getArtifactCategory(artifact) {
+            // Check metadata first
+            if (artifact.metadata?.template) {
+                return artifact.metadata.template;
+            }
+            // Detect from test name or title
+            const name = (artifact.test_name + ' ' + artifact.title).toLowerCase();
+            if (name.includes('latency') || name.includes('throughput') || name.includes('percentile') || name.includes('performance')) return 'performance';
+            if (name.includes('memory') || name.includes('heap') || name.includes('allocation')) return 'memory';
+            if (name.includes('api') || name.includes('endpoint') || name.includes('status') || name.includes('response')) return 'api';
+            if (name.includes('coverage') || name.includes('cov')) return 'coverage';
+            if (name.includes('portfolio') || name.includes('drawdown') || name.includes('sharpe') || name.includes('return') || name.includes('trading') || name.includes('volatility')) return 'trading';
+            return 'other';
+        }
+
+        function filterArtifactCategory(category) {
+            currentArtifactCategory = category;
+
+            // Update tab buttons
+            document.querySelectorAll('.artifact-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.category === category);
+            });
+
+            // Filter cards
+            const cards = document.querySelectorAll('#artifactsCharts .chart-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const cardCategory = card.dataset.category;
+                const matchesCategory = category === 'all' || cardCategory === category;
+                const matchesSearch = !currentSearchFilter ||
+                    card.querySelector('h3')?.textContent.toLowerCase().includes(currentSearchFilter) ||
+                    card.querySelector('p')?.textContent.toLowerCase().includes(currentSearchFilter);
+
+                if (matchesCategory && matchesSearch) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Update count
+            const section = document.getElementById('artifactsSection');
+            if (section) {
+                const categoryLabel = category === 'all' ? '' : ` - ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+                section.querySelector('h2').textContent = `📊 Test Artifacts${categoryLabel} (${visibleCount})`;
+            }
+        }
+
+        function renderArtifacts(artifacts) {
+            const section = document.getElementById('artifactsSection');
+            const container = document.getElementById('artifactsCharts');
+
+            if (!artifacts || artifacts.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            container.innerHTML = '';
+
+            // Count by category for badges
+            const categoryCounts = { all: artifacts.length, performance: 0, memory: 0, api: 0, coverage: 0, trading: 0, other: 0 };
+
+            artifacts.forEach((artifact, idx) => {
+                const category = getArtifactCategory(artifact);
+                categoryCounts[category]++;
+
+                const chartId = `artifact-chart-${idx}`;
+                const card = document.createElement('div');
+                card.className = 'chart-card';
+                card.dataset.category = category;
+
+                const categoryBadge = {
+                    performance: '⚡',
+                    memory: '🧠',
+                    api: '🌐',
+                    coverage: '📈',
+                    trading: '💹',
+                    other: '📊'
+                }[category] || '📊';
+
+                card.innerHTML = `
+                    <h3>${categoryBadge} ${artifact.title}</h3>
+                    <p style="color:#888;font-size:12px;margin-bottom:10px;">
+                        <span style="background:#2d2d44;padding:2px 6px;border-radius:10px;font-size:10px;margin-right:5px;">${category}</span>
+                        ${artifact.test_name}
+                    </p>
+                    <div id="${chartId}" class="chart-container"></div>
+                `;
+                container.appendChild(card);
+
+                // Wait for DOM update
+                setTimeout(() => renderArtifactChart(chartId, artifact), 0);
+            });
+
+            // Update tab badges
+            document.querySelectorAll('.artifact-tab').forEach(btn => {
+                const cat = btn.dataset.category;
+                const count = categoryCounts[cat] || 0;
+                if (cat !== 'all' && count === 0) {
+                    btn.style.opacity = '0.5';
+                } else {
+                    btn.style.opacity = '1';
+                }
+            });
+
+            // Apply current filter
+            if (currentArtifactCategory !== 'all') {
+                filterArtifactCategory(currentArtifactCategory);
+            }
+        }
+
+        function renderArtifactChart(chartId, artifact) {
+            const chartDom = document.getElementById(chartId);
+            if (!chartDom) return;
+
+            const chart = echarts.init(chartDom, 'dark');
+            artifactCharts[chartId] = chart;
+
+            const colors = ['#00d4ff', '#26a69a', '#ffd700', '#ef5350', '#9c27b0', '#ff9800'];
+
+            let option = {
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                grid: { left: '10%', right: '5%', top: '15%', bottom: '15%' },
+                xAxis: {
+                    type: 'value',
+                    name: artifact.x_label || '',
+                    axisLabel: { color: '#888' },
+                    nameTextStyle: { color: '#888' }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: artifact.y_label || '',
+                    axisLabel: { color: '#888' },
+                    nameTextStyle: { color: '#888' }
+                },
+                legend: artifact.series.length > 1 ? {
+                    data: artifact.series.map(s => s.name),
+                    textStyle: { color: '#888' }
+                } : undefined,
+                series: []
+            };
+
+            // Configure based on chart type
+            switch (artifact.chart_type) {
+                case 'line':
+                    option.series = artifact.series.map((s, i) => ({
+                        name: s.name,
+                        type: 'line',
+                        smooth: true,
+                        data: s.data.map(p => [p.x, p.y]),
+                        lineStyle: { color: s.color || colors[i % colors.length] },
+                        itemStyle: { color: s.color || colors[i % colors.length] },
+                        areaStyle: artifact.series.length === 1 ? {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: (s.color || colors[i % colors.length]) + '80' },
+                                { offset: 1, color: (s.color || colors[i % colors.length]) + '10' }
+                            ])
+                        } : undefined
+                    }));
+                    break;
+
+                case 'bar':
+                    option.xAxis.type = 'category';
+                    option.xAxis.data = artifact.series[0]?.data.map(p => p.label || p.x) || [];
+                    option.series = artifact.series.map((s, i) => ({
+                        name: s.name,
+                        type: 'bar',
+                        data: s.data.map(p => p.y),
+                        itemStyle: { color: s.color || colors[i % colors.length] }
+                    }));
+                    break;
+
+                case 'area':
+                    option.series = artifact.series.map((s, i) => ({
+                        name: s.name,
+                        type: 'line',
+                        smooth: true,
+                        data: s.data.map(p => [p.x, p.y]),
+                        areaStyle: { color: s.color || colors[i % colors.length] + '60' },
+                        lineStyle: { color: s.color || colors[i % colors.length] },
+                        itemStyle: { color: s.color || colors[i % colors.length] }
+                    }));
+                    break;
+
+                case 'scatter':
+                    option.series = artifact.series.map((s, i) => ({
+                        name: s.name,
+                        type: 'scatter',
+                        data: s.data.map(p => [p.x, p.y]),
+                        symbolSize: 10,
+                        itemStyle: { color: s.color || colors[i % colors.length] }
+                    }));
+                    break;
+
+                case 'gauge':
+                    const value = artifact.series[0]?.data[0]?.y || 0;
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'gauge',
+                            startAngle: 180,
+                            endAngle: 0,
+                            min: 0,
+                            max: 100,
+                            splitNumber: 5,
+                            itemStyle: { color: '#26a69a' },
+                            progress: { show: true, width: 20 },
+                            pointer: { show: false },
+                            axisLine: { lineStyle: { width: 20, color: [[1, '#2d2d44']] } },
+                            axisTick: { show: false },
+                            splitLine: { show: false },
+                            axisLabel: { color: '#888', distance: -40 },
+                            title: { show: true, offsetCenter: [0, '30%'], color: '#888' },
+                            detail: {
+                                valueAnimation: true,
+                                fontSize: 32,
+                                offsetCenter: [0, '-10%'],
+                                formatter: '{value}%',
+                                color: '#26a69a'
+                            },
+                            data: [{ value: value.toFixed(1), name: artifact.series[0]?.name || '' }]
+                        }]
+                    };
+                    break;
+
+                case 'pie':
+                    option = {
+                        backgroundColor: 'transparent',
+                        tooltip: { trigger: 'item' },
+                        legend: { orient: 'vertical', left: 'left', textStyle: { color: '#888' } },
+                        series: [{
+                            type: 'pie',
+                            radius: '60%',
+                            data: artifact.series[0]?.data.map((p, i) => ({
+                                value: p.y,
+                                name: p.label || `Item ${i + 1}`,
+                                itemStyle: { color: colors[i % colors.length] }
+                            })) || [],
+                            emphasis: {
+                                itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' }
+                            }
+                        }]
+                    };
+                    break;
+            }
+
+            chart.setOption(option);
+        }
+
+        let currentSearchFilter = '';
+        let debugEvents = [];
+        let debugFilters = { pinia: true, tauri: true, vue: true, error: true };
+        const MAX_DEBUG_EVENTS = 500;
+
+        function showTab(tab) {
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+
+            // Show/hide panels
+            document.getElementById('panel-tests').style.display = tab === 'tests' ? 'flex' : 'none';
+            document.getElementById('panel-debug').style.display = tab === 'debug' ? 'flex' : 'none';
+            document.getElementById('panel-debug').classList.toggle('active', tab === 'debug');
+        }
+
+        function toggleDebugFilter(source) {
+            debugFilters[source] = !debugFilters[source];
+            renderDebugEvents();
+        }
+
+        function clearDebugEvents() {
+            debugEvents = [];
+            renderDebugEvents();
+        }
+
+        function addDebugEvent(event) {
+            debugEvents.unshift(event);
+            if (debugEvents.length > MAX_DEBUG_EVENTS) {
+                debugEvents = debugEvents.slice(0, MAX_DEBUG_EVENTS);
+            }
+            renderDebugEvents();
+
+            // Flash the debug tab if not active
+            const debugTab = document.getElementById('tab-debug');
+            if (!debugTab.classList.contains('active')) {
+                debugTab.style.animation = 'pulse 0.5s 3';
+                setTimeout(() => debugTab.style.animation = '', 1500);
+            }
+        }
+
+        function renderDebugEvents() {
+            const container = document.getElementById('debugEvents');
+            const filteredEvents = debugEvents.filter(e => {
+                if (e.error && debugFilters.error) return true;
+                return debugFilters[e.source] !== false;
+            });
+
+            document.getElementById('debugEventCount').textContent = `${filteredEvents.length} / ${debugEvents.length} events`;
+
+            if (filteredEvents.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center;padding:60px;color:#666;">
+                        <h2 style="margin-bottom:10px;color:#888;">🐛 Debug Console</h2>
+                        <p>${debugEvents.length > 0 ? 'No events match current filters' : 'Waiting for events from your Vue/Tauri app...'}</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = filteredEvents.map(e => `
+                <div class="debug-event ${e.source} ${e.error ? 'error' : ''}">
+                    <div class="event-header">
+                        <span class="event-source ${e.source}">${e.source}</span>
+                        <span class="event-time">${e.timestamp}</span>
+                    </div>
+                    <div class="event-name">${e.name}</div>
+                    <div class="event-type">${e.event_type}</div>
+                    ${e.payload ? `<div class="event-payload">${JSON.stringify(e.payload, null, 2)}</div>` : ''}
+                    ${e.error ? `<div class="event-error">❌ ${e.error}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function filterTests(query) {
+            currentSearchFilter = query.toLowerCase();
+
+            // Filter artifacts section
+            const artifactCards = document.querySelectorAll('#artifactsCharts .chart-card');
+            let visibleCount = 0;
+
+            artifactCards.forEach(card => {
+                const title = card.querySelector('h3')?.textContent.toLowerCase() || '';
+                const testName = card.querySelector('p')?.textContent.toLowerCase() || '';
+
+                if (!currentSearchFilter || title.includes(currentSearchFilter) || testName.includes(currentSearchFilter)) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Update artifacts section visibility
+            const artifactsSection = document.getElementById('artifactsSection');
+            if (artifactsSection) {
+                if (visibleCount === 0 && currentSearchFilter) {
+                    artifactsSection.querySelector('h2').textContent = `📊 Test Artifacts (no matches for "${currentSearchFilter}")`;
+                } else {
+                    artifactsSection.querySelector('h2').textContent = `📊 Test Artifacts${currentSearchFilter ? ` (${visibleCount} matches)` : ''}`;
+                }
+            }
+
+            // Also filter task items if viewing run details
+            const taskItems = document.querySelectorAll('#detailTasks .task-item, #currentTasks .task-item');
+            taskItems.forEach(item => {
+                const taskName = item.querySelector('.task-name')?.textContent.toLowerCase() || '';
+                if (!currentSearchFilter || taskName.includes(currentSearchFilter)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        function showNotification(message) {
+            // Create notification element
+            let notification = document.getElementById('notification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'notification';
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 80px;
+                    right: 20px;
+                    background: #1a1a2e;
+                    border: 1px solid #00d4ff;
+                    border-radius: 8px;
+                    padding: 12px 20px;
+                    color: #00d4ff;
+                    font-size: 14px;
+                    z-index: 1000;
+                    animation: slideIn 0.3s ease;
+                `;
+                document.body.appendChild(notification);
+            }
+            notification.textContent = message;
+            notification.style.display = 'block';
+
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        async function clearHistory() {
+            if (confirm('Clear all run history?')) {
+                try {
+                    await fetch('/api/clear-history', { method: 'POST' });
+                    showNotification('✓ History cleared');
+                    fetchStats();
+                } catch (e) {
+                    showNotification('❌ Failed to clear history');
+                }
+            }
+        }
 
         async function stopServer() {
             if (confirm('Stop the server?')) {
@@ -530,6 +1124,7 @@
 
         connect();
         fetchStats();
+        fetchArtifacts();
     </script>
 </body>
 </html>

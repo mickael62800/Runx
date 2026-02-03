@@ -1,22 +1,10 @@
 //! Database module for Runx
 //!
-//! Provides SQLite storage for:
-//! - Run history and task results
-//! - Test case details (JUnit parsing)
-//! - Flaky test detection
-//! - Cache metadata
-//! - Coverage results
-//! - Artifacts
+//! Provides SQLite storage for run history and task results.
 
-mod cache;
 mod flaky;
-mod queries;
 mod schema;
 
-pub use cache::*;
-pub use flaky::*;
-pub use queries::*;
-pub use schema::*;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -31,20 +19,8 @@ pub struct Database {
 impl Database {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
-
-        // Run migrations
         schema::run_migrations(&conn)?;
-
         Ok(Self { conn })
-    }
-
-    pub fn open_default() -> Result<Self> {
-        let path = std::env::current_dir()?.join(".runx.db");
-        Self::open(&path)
-    }
-
-    pub fn connection(&self) -> &Connection {
-        &self.conn
     }
 
     // === Runs ===
@@ -165,90 +141,33 @@ impl Database {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    // === Test Cases ===
-
-    pub fn insert_test_cases(&self, task_result_id: &str, cases: &[TestCase]) -> Result<()> {
-        let mut stmt = self.conn.prepare(
-            "INSERT INTO test_cases (task_result_id, name, classname, status, duration_ms, error_message, error_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
-        )?;
-
-        for case in cases {
-            stmt.execute(params![
-                task_result_id,
-                case.name,
-                case.classname,
-                case.status,
-                case.duration_ms,
-                case.error_message,
-                case.error_type,
-            ])?;
-        }
-        Ok(())
-    }
-
-    pub fn get_test_cases_for_task(&self, task_result_id: &str) -> Result<Vec<TestCase>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, task_result_id, name, classname, status, duration_ms, error_message, error_type
-             FROM test_cases WHERE task_result_id = ?1"
-        )?;
-
-        let rows = stmt.query_map(params![task_result_id], |row| {
-            Ok(TestCase {
-                id: row.get(0)?,
-                task_result_id: row.get(1)?,
-                name: row.get(2)?,
-                classname: row.get(3)?,
-                status: row.get(4)?,
-                duration_ms: row.get(5)?,
-                error_message: row.get(6)?,
-                error_type: row.get(7)?,
-            })
-        })?;
-
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
     // === Stats ===
 
     pub fn get_dashboard_stats(&self) -> Result<DashboardStats> {
-        // Total runs
-        let total_runs: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM runs",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_runs: i32 = self.conn.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
 
-        // Total tasks executed
         let total_tasks_executed: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM task_results",
-            [],
-            |row| row.get(0),
+            "SELECT COUNT(*) FROM task_results", [], |row| row.get(0)
         )?;
 
-        // Overall pass rate
         let (total_passed, total_failed): (i32, i32) = self.conn.query_row(
             "SELECT COALESCE(SUM(passed), 0), COALESCE(SUM(failed), 0) FROM runs",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
+
         let overall_pass_rate = if total_passed + total_failed > 0 {
             (total_passed as f64) / ((total_passed + total_failed) as f64) * 100.0
         } else {
             0.0
         };
 
-        // Average duration
         let avg_duration_ms: i64 = self.conn.query_row(
-            "SELECT COALESCE(AVG(duration_ms), 0) FROM task_results",
-            [],
-            |row| row.get(0),
+            "SELECT COALESCE(AVG(duration_ms), 0) FROM task_results", [], |row| row.get(0)
         ).unwrap_or(0);
 
-        // Recent runs
         let recent_runs = self.get_recent_runs(20)?;
 
-        // Pass rate history (last 7 days)
         let mut stmt = self.conn.prepare(
             "SELECT DATE(started_at) as date,
                     AVG(CAST(passed AS FLOAT) / CAST(passed + failed AS FLOAT)) * 100 as pass_rate,
@@ -286,81 +205,27 @@ impl Database {
         }
     }
 
-    // === History Management ===
-
-    /// Clear all run history from the database
-    /// Deletes in order to respect foreign key constraints
     pub fn clear_all_history(&self) -> Result<usize> {
-        let mut total_deleted = 0;
-
-        // Delete in reverse order of dependencies
-        // artifacts depends on task_results
-        total_deleted += self.conn.execute("DELETE FROM artifacts", [])?;
-
-        // coverage_results depends on task_results
-        total_deleted += self.conn.execute("DELETE FROM coverage_results", [])?;
-
-        // test_cases depends on task_results
-        total_deleted += self.conn.execute("DELETE FROM test_cases", [])?;
-
-        // test_history is standalone
-        total_deleted += self.conn.execute("DELETE FROM test_history", [])?;
-
-        // task_results depends on runs
-        total_deleted += self.conn.execute("DELETE FROM task_results", [])?;
-
-        // runs is the root table
-        total_deleted += self.conn.execute("DELETE FROM runs", [])?;
-
-        Ok(total_deleted)
+        let mut total = 0;
+        total += self.conn.execute("DELETE FROM artifacts", [])?;
+        total += self.conn.execute("DELETE FROM coverage_results", [])?;
+        total += self.conn.execute("DELETE FROM test_cases", [])?;
+        total += self.conn.execute("DELETE FROM test_history", [])?;
+        total += self.conn.execute("DELETE FROM task_results", [])?;
+        total += self.conn.execute("DELETE FROM runs", [])?;
+        Ok(total)
     }
 
-    /// Get statistics about stored history
-    pub fn get_history_stats(&self) -> Result<HistoryStats> {
-        let total_runs: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM runs",
-            [],
-            |row| row.get(0),
+    pub fn get_failed_tests_from_last_run(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tr.task_name FROM task_results tr
+             JOIN runs r ON tr.run_id = r.id
+             WHERE tr.status = 'failed'
+             AND r.id = (SELECT id FROM runs ORDER BY started_at DESC LIMIT 1)"
         )?;
 
-        let total_task_results: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM task_results",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let total_test_cases: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM test_cases",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let total_test_history: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM test_history",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let total_coverage_results: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM coverage_results",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let total_artifacts: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM artifacts",
-            [],
-            |row| row.get(0),
-        )?;
-
-        Ok(HistoryStats {
-            total_runs,
-            total_task_results,
-            total_test_cases,
-            total_test_history,
-            total_coverage_results,
-            total_artifacts,
-        })
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 }
 
@@ -390,18 +255,6 @@ pub struct TaskResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestCase {
-    pub id: i64,
-    pub task_result_id: String,
-    pub name: String,
-    pub classname: Option<String>,
-    pub status: String,
-    pub duration_ms: Option<i64>,
-    pub error_message: Option<String>,
-    pub error_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunSummary {
     pub run: Run,
     pub tasks: Vec<TaskResult>,
@@ -422,14 +275,4 @@ pub struct PassRatePoint {
     pub date: String,
     pub pass_rate: f64,
     pub run_count: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoryStats {
-    pub total_runs: i32,
-    pub total_task_results: i32,
-    pub total_test_cases: i32,
-    pub total_test_history: i32,
-    pub total_coverage_results: i32,
-    pub total_artifacts: i32,
 }
